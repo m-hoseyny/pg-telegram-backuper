@@ -1,0 +1,3 @@
+flask
+pyrogram
+gunicorn==22.0.0
