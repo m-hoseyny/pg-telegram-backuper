@@ -20,8 +20,6 @@ RUN mkdir -p /app/data && \
     chmod 755 /app/data && \
     chmod 644 /app/data/connections.json
 
-# Volume for persistent data
-VOLUME ["/app/data"]
 
 # Run the application
 ENTRYPOINT ["./start.sh"]

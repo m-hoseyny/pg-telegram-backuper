@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 import requests
 import logging
+from dotenv import load_dotenv
 from utils import (
     load_connections,
     save_connections,
@@ -15,6 +16,8 @@ import uuid
 import json
 
 logger = logging.getLogger(__name__)
+load_dotenv()
+CHAT_ID = int(os.getenv("TELEGRAM_DEFAULT_CHAT_ID"))
 
 class TelegramUploader:
     def __init__(self, api_id: str, api_hash: str, bot_token: str, logger=None):
@@ -51,11 +54,13 @@ class TelegramUploader:
 
             response = "📋 Database Connections:\n\n"
             for conn in data['connections']:
+                chat_info = f"Chat: {conn.get('chat_id', 'Default')}"
                 response += (
                     f"🔹 ID: `{conn['id']}`\n"
                     f"📝 Name: {conn['name']}\n"
                     f"🔗 URL: `{conn['db_url']}`\n"
                     f"⏰ Schedule: `{conn['cron_schedule']}`\n"
+                    f"💬 {chat_info}\n"
                     f"📅 Created: {conn['created_at']}\n"
                     f"🔄 Last Run: {conn.get('last_run_at', 'Never')}\n\n"
                 )
@@ -64,29 +69,36 @@ class TelegramUploader:
         @self.client.on_message(filters.command("add"))
         def add_connection_command(client, message):
             try:
-                # Format: /add name|db_url|cron_schedule
+                # Format: /add name|db_url|cron_schedule|[chat_id]
                 command_text = message.text.split(maxsplit=1)
                 if len(command_text) != 2:
                     message.reply_text(
                         "❌ Invalid format. Use:\n"
-                        "/add name|db_url|cron_schedule\n\n"
+                        "/add name|db_url|cron_schedule|[chat_id]\n\n"
                         "Example:\n"
-                        "/add MyDB|postgres://user:pass@host:5432/dbname|0 0 * * *"
+                        "/add MyDB|postgres://user:pass@host:5432/dbname|0 0 * * *|123456789\n"
+                        "Note: chat_id is optional. If not provided, default chat will be used."
                     )
                     return
 
                 # Split the parameters by |
                 params = command_text[1].split('|')
-                if len(params) != 3:
+                if len(params) < 3 or len(params) > 4:
                     message.reply_text(
                         "❌ Invalid format. Use:\n"
-                        "/add name|db_url|cron_schedule\n\n"
+                        "/add name|db_url|cron_schedule|[chat_id]\n\n"
                         "Example:\n"
-                        "/add MyDB|postgres://user:pass@host:5432/dbname|0 0 * * *"
+                        "/add MyDB|postgres://user:pass@host:5432/dbname|0 0 * * *|123456789\n"
+                        "Note: chat_id is optional. If not provided, default chat will be used."
                     )
                     return
 
-                name, db_url, cron_schedule = [p.strip() for p in params]
+                # Parse parameters
+                params = [p.strip() for p in params]
+                name = params[0]
+                db_url = params[1]
+                cron_schedule = params[2]
+                chat_id = int(params[3]) if len(params) == 4 else None
 
                 # Validate cron
                 if not validate_cron(cron_schedule):
@@ -100,15 +112,18 @@ class TelegramUploader:
                     "name": name,
                     "db_url": db_url,
                     "cron_schedule": cron_schedule,
+                    "chat_id": chat_id,
                     "created_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
                     "last_run_at": None
                 }
                 data['connections'].append(new_connection)
                 save_connections(data)
 
+                chat_info = f"Chat ID: {chat_id}" if chat_id else "Using default chat"
                 message.reply_text(
                     f"✅ Connection added successfully!\n"
-                    f"ID: `{new_connection['id']}`"
+                    f"ID: `{new_connection['id']}`\n"
+                    f"{chat_info}"
                 )
 
             except Exception as e:
@@ -192,7 +207,7 @@ class TelegramUploader:
 
                     message.reply_text(f"🔄 Starting backup for {connection['name']}...")
                     try:
-                        backup_database(connection, self, message.chat.id)
+                        backup_database(connection, self, connection.get('chat_id', CHAT_ID))
                         results.append({"id": connection['id'], "status": "success"})
                     except Exception as e:
                         results.append({"id": connection['id'], "status": "error", "error": str(e)})
@@ -202,7 +217,7 @@ class TelegramUploader:
                     message.reply_text("🔄 Starting backup for all connections...")
                     for connection in data['connections']:
                         try:
-                            backup_database(connection, self, message.chat.id)
+                            backup_database(connection, self, connection.get('chat_id', CHAT_ID))
                             results.append({"id": connection['id'], "status": "success"})
                         except Exception as e:
                             results.append({"id": connection['id'], "status": "error", "error": str(e)})
@@ -264,7 +279,7 @@ class TelegramUploader:
                 caption=caption
             )
                 
-            print(f"Successfully uploaded {file_name}")
+            self.logger.info(f"Successfully uploaded {file_name}")
             
         except Exception as e:
             error_msg = f"Failed to upload {file_path}: {str(e)}"

@@ -84,10 +84,10 @@ def parse_db_url(db_url):
         'password': parsed.password
     }
 
-def backup_database(connection, telegram_uploader, chat_id):
+def backup_database(connection, telegram_uploader, default_chat_id):
     """Execute database backup for a given connection"""
     try:
-        # Update last_run_at in connections.json
+        # Update last run timestamp
         connections = load_connections()
         for conn in connections['connections']:
             if conn['id'] == connection['id']:
@@ -95,7 +95,7 @@ def backup_database(connection, telegram_uploader, chat_id):
                 save_connections(connections)
                 break
         
-        # Parse database URL
+        # Parse database URL and prepare backup
         db_info = parse_db_url(connection['db_url'])
         timestamp = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         backup_filename = f"{connection['name']}_{timestamp}"
@@ -107,8 +107,8 @@ def backup_database(connection, telegram_uploader, chat_id):
             env['PGPASSWORD'] = db_info['password']
             
             # Backup file paths
-            dump_path = os.path.join(temp_dir, f"{backup_filename}.sql")
-            gzip_path = os.path.join(temp_dir, f"{backup_filename}.sql.gz")
+            backup_path = os.path.join(temp_dir, f"{backup_filename}.sql")
+            compressed_path = os.path.join(temp_dir, f"{backup_filename}.sql.gz")
             
             # Run pg_dump
             logger.info(f"Starting backup for database: {connection['name']}")
@@ -118,8 +118,7 @@ def backup_database(connection, telegram_uploader, chat_id):
                 '-p', str(db_info['port']),
                 '-U', db_info['user'],
                 '-d', db_info['database'],
-                '-F', 'p',  # Plain text format
-                '-f', dump_path
+                '-f', backup_path
             ]
             
             subprocess.run(
@@ -132,24 +131,23 @@ def backup_database(connection, telegram_uploader, chat_id):
             
             # Compress the backup file
             logger.info(f"Compressing backup file for: {connection['name']}")
-            with open(dump_path, 'rb') as f_in:
-                with gzip.open(gzip_path, 'wb') as f_out:
+            with open(backup_path, 'rb') as f_in:
+                with gzip.open(compressed_path, 'wb') as f_out:
                     f_out.writelines(f_in)
             
             # Upload to Telegram
-            logger.info(f"Uploading backup to Telegram for: {connection['name']}")
-            caption = f"Database backup for {connection['name']}\nBackup time: {datetime.now().isoformat()}"
-            telegram_uploader.upload_file(gzip_path, chat_id, caption=caption)
+            chat_id = int(connection.get('chat_id', default_chat_id))
+            telegram_uploader.upload_file(
+                compressed_path,
+                chat_id,
+                f"Backup for {connection['name']} completed at {timestamp}"
+            )
             
-            logger.info(f"Backup completed successfully for: {connection['name']}")
+            return True
             
-    except subprocess.CalledProcessError as e:
-        error_msg = f"pg_dump error: {e.stderr}"
-        logger.error(f"Backup failed for {connection['name']}: {error_msg}")
-        raise Exception(error_msg)
     except Exception as e:
-        logger.error(f"Error backing up database {connection['name']}: {str(e)}")
-        raise
+        logger.error(f"Backup failed for {connection['name']}: {str(e)}")
+        raise e
 
 def initialize_scheduler(scheduler, connections, backup_callback, telegram_uploader, CHAT_ID):
     """Initialize the scheduler with existing connections"""
