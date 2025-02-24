@@ -37,3 +37,5 @@ ENV/
 *.log
 *.session
 *.session-*
+
+*.json
