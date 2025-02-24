@@ -1,3 +1,5 @@
-flask
-pyrogram
+Flask==2.0.1
+python-dotenv==0.19.0
+Pyrogram==2.0.106
+APScheduler==3.10.1
 gunicorn==22.0.0
