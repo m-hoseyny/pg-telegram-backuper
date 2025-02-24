@@ -19,7 +19,7 @@ load_dotenv()
 TELEGRAM_API = os.getenv("TELEGRAM_API_ID")
 TELEGRAM_HASH = os.getenv("TELEGRAM_API_HASH")
 CHAT_ID = int(os.getenv("TELEGRAM_DEFAULT_CHAT_ID"))
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+BOT_TOKEN = '8139886917:AAFeNBYQf7vKRGDRSPp_Kft9woGoiLedsW4'
 APP_API_KEY = os.getenv("APP_API_KEY")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
