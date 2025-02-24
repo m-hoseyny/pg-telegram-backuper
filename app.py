@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from upload_handler import TelegramUploader
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from utils import (
     load_connections,
     save_connections,
@@ -168,6 +169,59 @@ def delete_connection(connection_id):
     scheduler.remove_job(job_id)
     
     return {'status': 'ok'}
+
+@app.route('/backup/run', methods=['POST'])
+@require_api_key
+def run_backup():
+    """Trigger immediate backup for specific connection or all connections"""
+    data = request.json
+    connection_id = data.get('connection_id')  # Optional: if not provided, backup all
+    
+    connections = load_connections()
+    results = []
+    
+    if connection_id:
+        # Backup specific connection
+        connection = next((c for c in connections['connections'] if c['id'] == connection_id), None)
+        if not connection:
+            return {'status': 'failed', 'error': f'Connection {connection_id} not found'}, 404
+            
+        try:
+            backup_database(connection, telegram_uploader, CHAT_ID)
+            results.append({
+                'connection_id': connection['id'],
+                'name': connection['name'],
+                'status': 'success'
+            })
+        except Exception as e:
+            results.append({
+                'connection_id': connection['id'],
+                'name': connection['name'],
+                'status': 'failed',
+                'error': str(e)
+            })
+    else:
+        # Backup all connections
+        for connection in connections['connections']:
+            try:
+                backup_database(connection, telegram_uploader, CHAT_ID)
+                results.append({
+                    'connection_id': connection['id'],
+                    'name': connection['name'],
+                    'status': 'success'
+                })
+            except Exception as e:
+                results.append({
+                    'connection_id': connection['id'],
+                    'name': connection['name'],
+                    'status': 'failed',
+                    'error': str(e)
+                })
+    
+    return {
+        'status': 'ok',
+        'results': results
+    }
 
 if __name__ == "__main__":
     # Initialize the scheduler before starting the app
