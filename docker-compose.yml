@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  backup-service:
+    build: .
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped

@@ -73,13 +73,14 @@ class TelegramUploader:
             
             # Upload the file
             chat_id = int(chat_id)
+            self.logger.info(f"Going to send to chat_id {chat_id} - {file_name} ({file_size/1024} KB)")
             self.client.send_document(
                 chat_id=chat_id,
                 document=file_path,
                 caption=caption
             )
                 
-            print(f"Successfully uploaded {file_name}")
+            self.logger.info(f"Successfully uploaded {file_name}")
             
         except Exception as e:
             self.logger.error(e)

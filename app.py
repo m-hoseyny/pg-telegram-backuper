@@ -223,11 +223,28 @@ def run_backup():
         'results': results
     }
 
-if __name__ == "__main__":
-    # Initialize the scheduler before starting the app
-    initialize_scheduler(
-        scheduler,
-        load_connections(),
-        lambda conn: backup_database(conn, telegram_uploader, CHAT_ID)
-    )
-    app.run(host=HOST, port=PORT)
+# Initialize the scheduler
+def init_scheduler():
+    if not scheduler.running:
+        initialize_scheduler(
+            scheduler,
+            load_connections(),
+            backup_database,
+            telegram_uploader,
+            CHAT_ID
+        )
+        if not scheduler.running:
+            scheduler.start()
+        for sch in scheduler.get_jobs():
+            logger.info(f'The back up task: {sch}')
+        logger.info("Scheduler initialized and started")
+
+# Initialize scheduler with the app context
+with app.app_context():
+    init_scheduler()
+
+
+
+# telegram_uploader.client.run()
+# if __name__ == "__main__":
+#     app.run(host=HOST, port=PORT)

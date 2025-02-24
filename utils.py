@@ -10,10 +10,11 @@ from datetime import datetime
 from apscheduler.triggers.cron import CronTrigger
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
 
 # Define data directory path
 DATA_DIR = './data'
-print(DATA_DIR)
 CONNECTIONS_FILE = os.path.join(DATA_DIR, 'connections.json')
 
 def ensure_data_dir():
@@ -150,7 +151,7 @@ def backup_database(connection, telegram_uploader, chat_id):
         logger.error(f"Error backing up database {connection['name']}: {str(e)}")
         raise
 
-def initialize_scheduler(scheduler, connections, backup_callback):
+def initialize_scheduler(scheduler, connections, backup_callback, telegram_uploader, CHAT_ID):
     """Initialize the scheduler with existing connections"""
     logger.info("Initializing scheduler...")
     
@@ -169,7 +170,7 @@ def initialize_scheduler(scheduler, connections, backup_callback):
             backup_callback,
             CronTrigger.from_crontab(connection['cron_schedule']),
             id=job_id,
-            args=[connection],
+            args=[connection, telegram_uploader, CHAT_ID],
             replace_existing=True
         )
         logger.info(f"Scheduled backup job for {connection['name']} with schedule: {connection['cron_schedule']}")
