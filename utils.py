@@ -118,16 +118,23 @@ def backup_database(connection, telegram_uploader, default_chat_id):
                 '-p', str(db_info['port']),
                 '-U', db_info['user'],
                 '-d', db_info['database'],
-                '-f', backup_path
+                '-f', backup_path,
+                '-v'  # Add verbose output
             ]
             
-            subprocess.run(
-                pg_dump_cmd,
-                env=env,
-                check=True,
-                capture_output=True,
-                text=True
-            )
+            try:
+                result = subprocess.run(
+                    pg_dump_cmd,
+                    env=env,
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                logger.info(f"pg_dump output: {result.stdout}")
+            except subprocess.CalledProcessError as e:
+                error_msg = f"pg_dump failed:\nCommand: {' '.join(pg_dump_cmd)}\nError: {e.stderr}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
             
             # Compress the backup file
             logger.info(f"Compressing backup file for: {connection['name']}")

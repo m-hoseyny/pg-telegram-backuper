@@ -1,11 +1,14 @@
 FROM python:3.9-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    postgresql-client \
-    gcc \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Add PostgreSQL repository and install system dependencies
+RUN apt-get update \
+    && apt-get install -y curl gnupg2 lsb-release gcc python3-dev \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/postgresql.list \
+    && apt-get update \
+    && apt-get install -y postgresql-client-16 \
+    && rm -rf /var/lib/apt/lists/* \
+    && pg_dump --version
 
 WORKDIR /app
 
