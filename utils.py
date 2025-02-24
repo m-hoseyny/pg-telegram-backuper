@@ -91,17 +91,17 @@ def backup_database(connection, telegram_uploader, chat_id):
         connections = load_connections()
         for conn in connections['connections']:
             if conn['id'] == connection['id']:
-                conn['last_run_at'] = datetime.now().isoformat()
+                conn['last_run_at'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
                 save_connections(connections)
                 break
         
         # Parse database URL
         db_info = parse_db_url(connection['db_url'])
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         backup_filename = f"{connection['name']}_{timestamp}"
         
         # Create temporary directory for backup
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(dir='./data/backups') as temp_dir:
             # Set PostgreSQL environment variables
             env = os.environ.copy()
             env['PGPASSWORD'] = db_info['password']

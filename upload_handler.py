@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class TelegramUploader:
     def __init__(self, api_id: str, api_hash: str, bot_token: str, logger=None):
         self.logger = logger or logging.getLogger(__name__)
-        self.client = Client('pg-uploader', 
+        self.client = Client('./data/pg-uploader', 
                             bot_token=bot_token,
                             api_id=int(api_id), api_hash=api_hash)
         self.client.set_parse_mode(enums.ParseMode.MARKDOWN)
@@ -100,7 +100,8 @@ class TelegramUploader:
                     "name": name,
                     "db_url": db_url,
                     "cron_schedule": cron_schedule,
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+                    "last_run_at": None
                 }
                 data['connections'].append(new_connection)
                 save_connections(data)
