@@ -144,7 +144,7 @@ def backup_database(connection, telegram_uploader, default_chat_id):
             
             # Upload to Telegram
             chat_id = connection.get('chat_id', default_chat_id)
-            reply_to = connection.get('reply_to_message_id')
+            reply_to = int(connection.get('reply_to_message_id'))
             telegram_uploader.upload_file(
                 compressed_path,
                 chat_id,
