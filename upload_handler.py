@@ -10,7 +10,8 @@ from utils import (
     save_connections,
     validate_cron,
     backup_database,
-    initialize_scheduler
+    is_user_authorized,
+    add_authorized_user
 )
 import uuid
 import json
@@ -27,9 +28,26 @@ class TelegramUploader:
                             api_id=int(api_id), api_hash=api_hash)
         self.client.set_parse_mode(enums.ParseMode.MARKDOWN)
 
+        # Custom filter for authorized users
+        def authorized_user_filter(_, __, message):
+            return is_user_authorized(message.chat.id) or message.chat.id == CHAT_ID
+
+        authorized_only = filters.create(authorized_user_filter)
+
         # Register command handlers
         @self.client.on_message(filters.command("start"))
         def start_command(client, message):
+            chat_id = message.chat.id
+            if not is_user_authorized(chat_id) and chat_id != CHAT_ID:
+                unauthorized_text = (
+                    "⚠️ You are not authorized to use this bot.\n\n"
+                    "Your Chat ID: `{}`\n\n"
+                    "Please contact the admin to get authorized."
+                    .format(chat_id)
+                )
+                message.reply_text(unauthorized_text)
+                return
+
             welcome_text = (
                 "👋 Welcome to PostgreSQL Backup Bot!\n\n"
                 "I can help you backup your PostgreSQL databases and send them here.\n\n"
@@ -39,15 +57,40 @@ class TelegramUploader:
                 "/add - Add a new database connection\n"
                 "/update <connection_id> - Update a database connection\n"
                 "/delete <connection_id> - Delete a database connection\n"
-                "/backup [connection_id] - Run backup for specific or all connections\n\n"
-                "Your Chat ID: `{}`\n"
+                "/backup [connection_id] - Run backup for specific or all connections\n"
+                "{}"
+                "\nYour Chat ID: `{}`\n"
                 "This Message ID: `{}`\n"
                 "Use these IDs in your backup configuration to control where backups are sent and which message they reply to."
-                .format(message.chat.id, message.id)
+                .format(
+                    "/authorize <chat_id> - Authorize a user (Admin only)\n" if chat_id == CHAT_ID else "",
+                    message.chat.id, 
+                    message.id
+                )
             )
             message.reply_text(welcome_text)
 
-        @self.client.on_message(filters.command("list"))
+        @self.client.on_message(filters.command("authorize") & authorized_only)
+        def authorize_command(client, message):
+            # Split message into parts
+            parts = message.text.split()
+            
+            # Check if chat_id was provided
+            if len(parts) != 2:
+                message.reply_text("Usage: /authorize <chat_id>")
+                return
+            
+            try:
+                chat_id = parts[1]
+                if add_authorized_user(chat_id):
+                    message.reply_text(f"✅ User `{chat_id}` has been authorized successfully.")
+                else:
+                    message.reply_text(f"ℹ️ User `{chat_id}` is already authorized.")
+            except Exception as e:
+                logger.error(f"Error in authorize command: {e}")
+                message.reply_text("❌ Failed to authorize user. Please try again.")
+
+        @self.client.on_message(filters.command("list") & authorized_only)
         def list_connections_command(client, message):
             data = load_connections()
             if not data['connections']:
@@ -70,7 +113,7 @@ class TelegramUploader:
                 )
             message.reply_text(response)
 
-        @self.client.on_message(filters.command("add"))
+        @self.client.on_message(filters.command("add") & authorized_only)
         def add_connection_command(client, message):
             try:
                 # Format: /add name|db_url|cron_schedule|[chat_id]|[reply_to_message_id]
@@ -136,7 +179,7 @@ class TelegramUploader:
             except Exception as e:
                 message.reply_text(f"❌ Error: {str(e)}")
 
-        @self.client.on_message(filters.command("update"))
+        @self.client.on_message(filters.command("update") & authorized_only)
         def update_connection_command(client, message):
             try:
                 # Format: /update connection_id name db_url cron_schedule
@@ -171,7 +214,7 @@ class TelegramUploader:
             except Exception as e:
                 message.reply_text(f"❌ Error: {str(e)}")
 
-        @self.client.on_message(filters.command("delete"))
+        @self.client.on_message(filters.command("delete") & authorized_only)
         def delete_connection_command(client, message):
             try:
                 # Format: /delete connection_id
@@ -195,7 +238,7 @@ class TelegramUploader:
             except Exception as e:
                 message.reply_text(f"❌ Error: {str(e)}")
 
-        @self.client.on_message(filters.command("backup"))
+        @self.client.on_message(filters.command("backup") & authorized_only)
         def backup_command(client, message):
             try:
                 # Format: /backup [connection_id]

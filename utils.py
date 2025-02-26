@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from datetime import datetime
 from apscheduler.triggers.cron import CronTrigger
 
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
@@ -29,9 +30,29 @@ def load_connections():
     ensure_data_dir()
     try:
         with open(CONNECTIONS_FILE, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+            # Ensure authorized_users exists
+            if "authorized_users" not in data:
+                data["authorized_users"] = []
+            if "connections" not in data:
+                data["connections"] = []
+            return data
     except FileNotFoundError:
-        return {"connections": []}
+        return {"connections": [], "authorized_users": []}
+
+def is_user_authorized(chat_id):
+    """Check if a user is authorized"""
+    data = load_connections()
+    return str(chat_id) in data.get("authorized_users", [])
+
+def add_authorized_user(chat_id):
+    """Add a user to the authorized users list"""
+    data = load_connections()
+    if str(chat_id) not in data["authorized_users"]:
+        data["authorized_users"].append(str(chat_id))
+        save_connections(data)
+        return True
+    return False
 
 def save_connections(data):
     """Save connections to the JSON file"""
