@@ -16,6 +16,7 @@ from utils import (
 )
 import uuid
 import json
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -30,8 +31,14 @@ class TelegramUploader:
         self.client.set_parse_mode(enums.ParseMode.MARKDOWN)
 
         # Custom filter for authorized users
-        def authorized_user_filter(_, __, message):
-            return is_user_authorized(message.chat.id) or message.chat.id == CHAT_ID
+        def authorized_user_filter(_, __, update):
+            if hasattr(update, 'from_user'):
+                user_id = update.from_user.id
+            elif hasattr(update, 'chat'):
+                user_id = update.chat.id
+            else:
+                return False
+            return is_user_authorized(user_id) or user_id == CHAT_ID
 
         authorized_only = filters.create(authorized_user_filter)
 
@@ -239,50 +246,96 @@ class TelegramUploader:
         @self.client.on_message(filters.command("backup") & authorized_only)
         def backup_command(client, message):
             try:
-                # Format: /backup [connection_id]
-                parts = message.text.split()
-                connection_id = parts[1] if len(parts) > 1 else None
-
                 data = load_connections()
-                results = []
+                if not data['connections']:
+                    message.reply_text("No database connections found.")
+                    return
 
-                if connection_id:
-                    # Backup specific connection
-                    connection = next((c for c in data['connections'] if c['id'] == connection_id), None)
-                    if not connection:
-                        message.reply_text("❌ Connection not found")
-                        return
+                # Create inline keyboard with connections
+                buttons = []
+                for conn in data['connections']:
+                    # Create button text with name and masked URL
+                    button_text = f"{conn['name']}"
+                    # Create button with connection ID as callback data
+                    buttons.append([InlineKeyboardButton(
+                        button_text,
+                        callback_data=f"backup_{conn['id']}"
+                    )])
 
-                    message.reply_text(f"🔄 Starting backup for {connection['name']}...")
-                    try:
-                        backup_database(connection, self, connection.get('chat_id', CHAT_ID))
-                        results.append({"id": connection['id'], "status": "success"})
-                    except Exception as e:
-                        results.append({"id": connection['id'], "status": "error", "error": str(e)})
+                # Add "Backup All" button
+                buttons.append([InlineKeyboardButton(
+                    "🔄 Backup All Databases",
+                    callback_data="backup_all"
+                )])
 
-                else:
-                    # Backup all connections
-                    message.reply_text("🔄 Starting backup for all connections...")
-                    for connection in data['connections']:
-                        try:
-                            backup_database(connection, self, connection.get('chat_id', CHAT_ID))
-                            results.append({"id": connection['id'], "status": "success"})
-                        except Exception as e:
-                            results.append({"id": connection['id'], "status": "error", "error": str(e)})
-
-                # Report results
-                response = "📋 Backup Results:\n\n"
-                for result in results:
-                    conn = next(c for c in data['connections'] if c['id'] == result['id'])
-                    if result['status'] == 'success':
-                        response += f"✅ {conn['name']}: Success\n"
-                    else:
-                        response += f"❌ {conn['name']}: Failed - {result.get('error', 'Unknown error')}\n"
-
-                message.reply_text(response)
+                reply_markup = InlineKeyboardMarkup(buttons)
+                message.reply_text(
+                    "Select a database to backup:",
+                    reply_markup=reply_markup
+                )
 
             except Exception as e:
+                logger.error(f"Error in backup command: {e}")
                 message.reply_text(f"❌ Error: {str(e)}")
+
+        @self.client.on_callback_query(filters.regex(r'^backup_'))
+        def backup_callback(client, callback_query):
+            try:
+                # Check authorization
+                user_id = callback_query.from_user.id
+                if not (is_user_authorized(user_id) or user_id == CHAT_ID):
+                    callback_query.answer("You are not authorized to perform this action.", show_alert=True)
+                    return
+
+                # Get connection ID from callback data
+                action = callback_query.data.split('_')[1]
+                
+                if action == 'all':
+                    # Backup all databases
+                    callback_query.message.edit_text("Starting backup of all databases...")
+                    data = load_connections()
+                    success_count = 0
+                    error_count = 0
+                    
+                    for conn in data['connections']:
+                        try:
+                            backup_database(conn, self, CHAT_ID)
+                            success_count += 1
+                        except Exception as e:
+                            error_count += 1
+                            logger.error(f"Error backing up {conn['name']}: {e}")
+                    
+                    status_message = (
+                        f"Backup completed!\n"
+                        f"✅ Success: {success_count}\n"
+                        f"❌ Failed: {error_count}"
+                    )
+                    callback_query.message.reply_text(status_message)
+                
+                else:
+                    # Backup specific database
+                    connection_id = action
+                    data = load_connections()
+                    connection = next(
+                        (conn for conn in data['connections'] if conn['id'] == connection_id),
+                        None
+                    )
+                    
+                    if not connection:
+                        callback_query.message.edit_text("❌ Connection not found.")
+                        return
+                    
+                    callback_query.message.edit_text(f"Starting backup of database: {connection['name']}...")
+                    backup_database(connection, self, CHAT_ID)
+                    callback_query.message.reply_text(f"✅ Backup completed for {connection['name']}!")
+                
+                # Answer callback query to remove loading state
+                callback_query.answer()
+                
+            except Exception as e:
+                logger.error(f"Error in backup callback: {e}")
+                callback_query.message.edit_text(f"❌ Error during backup: {str(e)}")
+                callback_query.answer()
 
     def stop(self):
         """Stop the client if started"""
