@@ -105,6 +105,27 @@ def parse_db_url(db_url):
         'password': parsed.password
     }
 
+def mask_db_url(db_url):
+    """Mask username and password in database URL"""
+    try:
+        # Parse the URL
+        parts = db_url.split('@')
+        if len(parts) != 2:
+            return db_url
+            
+        credentials = parts[0].split('//')[-1].split(':')
+        if len(credentials) != 2:
+            return db_url
+            
+        # Mask username and password
+        username = '*' * len(credentials[0])
+        password = '*' * len(credentials[1])
+        
+        # Reconstruct the URL with masked credentials
+        return f"{parts[0].split('//')[0]}//{username}:{password}@{parts[1]}"
+    except:
+        return db_url
+
 def backup_database(connection, telegram_uploader, default_chat_id):
     """Execute database backup for a given connection"""
     try:

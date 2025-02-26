@@ -11,7 +11,8 @@ from utils import (
     validate_cron,
     backup_database,
     is_user_authorized,
-    add_authorized_user
+    add_authorized_user,
+    mask_db_url
 )
 import uuid
 import json
@@ -99,17 +100,14 @@ class TelegramUploader:
 
             response = "📋 Database Connections:\n\n"
             for conn in data['connections']:
-                chat_info = f"Chat: {conn.get('chat_id', 'Default')}"
-                reply_info = f"Reply to: {conn.get('reply_to_message_id', 'None')}"
                 response += (
                     f"🔹 ID: `{conn['id']}`\n"
-                    f"📝 Name: {conn['name']}\n"
-                    f"🔗 URL: `{conn['db_url']}`\n"
+                    f"📝 Name: `{conn['name']}`\n"
+                    f"🔗 URL: `{mask_db_url(conn['db_url'])}`\n"
                     f"⏰ Schedule: `{conn['cron_schedule']}`\n"
-                    f"💬 {chat_info}\n"
-                    f"↩️ {reply_info}\n"
-                    f"📅 Created: {conn['created_at']}\n"
-                    f"🔄 Last Run: {conn.get('last_run_at', 'Never')}\n\n"
+                    f"💬 Chat ID: `{conn.get('chat_id', 'Default')}`\n"
+                    f"↩️ Reply To: `{conn.get('reply_to_message_id', 'None')}`\n"
+                    "➖➖➖➖➖➖➖➖➖➖\n"
                 )
             message.reply_text(response)
 
