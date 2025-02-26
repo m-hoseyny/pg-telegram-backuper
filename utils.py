@@ -191,7 +191,8 @@ def backup_database(connection, telegram_uploader, default_chat_id):
                 compressed_path,
                 chat_id,
                 caption=f"Backup for {connection['name']} completed at {timestamp}",
-                reply_to_message_id=reply_to
+                reply_to_message_id=reply_to,
+                added_by=connection['added_by']
             )
             
             return True

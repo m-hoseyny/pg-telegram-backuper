@@ -12,11 +12,13 @@ from utils import (
     backup_database,
     is_user_authorized,
     add_authorized_user,
-    mask_db_url
+    mask_db_url,
+    initialize_scheduler
 )
 import uuid
 import json
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -29,6 +31,7 @@ class TelegramUploader:
                             bot_token=bot_token,
                             api_id=int(api_id), api_hash=api_hash)
         self.client.set_parse_mode(enums.ParseMode.MARKDOWN)
+        self.scheduler = BackgroundScheduler()
 
         # Custom filter for authorized users
         def authorized_user_filter(_, __, update):
@@ -41,6 +44,17 @@ class TelegramUploader:
             return is_user_authorized(user_id) or user_id == CHAT_ID
 
         authorized_only = filters.create(authorized_user_filter)
+
+        def refresh_scheduler():
+            """Refresh the scheduler with current connections"""
+            data = load_connections()
+            initialize_scheduler(
+                self.scheduler,
+                data,
+                backup_database,
+                self,
+                CHAT_ID
+            )
 
         # Register command handlers
         @self.client.on_message(filters.command("start"))
@@ -168,10 +182,14 @@ class TelegramUploader:
                     "chat_id": chat_id,
                     "reply_to_message_id": reply_to,
                     "created_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
-                    "last_run_at": None
+                    "last_run_at": None,
+                    "added_by": message.chat.id
                 }
                 data['connections'].append(new_connection)
                 save_connections(data)
+
+                # Refresh scheduler with new connection
+                refresh_scheduler()
 
                 chat_info = f"Chat ID: {chat_id}" if chat_id else "Using default chat"
                 reply_info = f"\nReply to message: {reply_to}" if reply_to else ""
@@ -211,6 +229,8 @@ class TelegramUploader:
                         conn['db_url'] = db_url
                         conn['cron_schedule'] = cron_schedule
                         save_connections(data)
+                        # Refresh scheduler with updated connection
+                        refresh_scheduler()
                         message.reply_text("✅ Connection updated successfully!")
                         return
 
@@ -238,6 +258,8 @@ class TelegramUploader:
                     return
 
                 save_connections(data)
+                # Refresh scheduler after deleting connection
+                refresh_scheduler()
                 message.reply_text("✅ Connection deleted successfully!")
 
             except Exception as e:
@@ -350,7 +372,7 @@ class TelegramUploader:
         with open(dest_path, 'wb') as f:
             f.write(response.content)
             
-    def upload_file(self, file_path: str, chat_id: str, caption: Optional[str] = None, reply_to_message_id: Optional[int] = None):
+    def upload_file(self, file_path: str, chat_id: str, caption: Optional[str] = None, reply_to_message_id: Optional[int] = None, added_by : Optional[int] = None):
         """Upload a file to Telegram chat
         
         Args:
@@ -386,4 +408,5 @@ class TelegramUploader:
         except Exception as e:
             error_msg = f"Failed to upload {file_path}: {str(e)}"
             self.logger.error(error_msg)
+            self.client.send_message(chat_id=int(added_by), text=error_msg)
             raise Exception(error_msg)
