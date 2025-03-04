@@ -5,6 +5,8 @@ import logging
 import subprocess
 import gzip
 import tempfile
+import time
+import random
 from urllib.parse import urlparse
 from datetime import datetime
 from apscheduler.triggers.cron import CronTrigger
@@ -131,11 +133,15 @@ def backup_database(connection, telegram_uploader, default_chat_id):
     try:
         # Update last run timestamp
         connections = load_connections()
-        for conn in connections['connections']:
-            if conn['id'] == connection['id']:
-                conn['last_run_at'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-                save_connections(connections)
-                break
+        try:
+            for conn in connections['connections']:
+                if conn['id'] == connection['id']:
+                    conn['last_run_at'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+                    save_connections(connections)
+                    break
+        except Exception as e:
+            logger.error('Error in reading files')
+            time.sleep(random.random() * 2)
         
         # Parse database URL and prepare backup
         db_info = parse_db_url(connection['db_url'])
