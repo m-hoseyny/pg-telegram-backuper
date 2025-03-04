@@ -131,17 +131,6 @@ def mask_db_url(db_url):
 def backup_database(connection, telegram_uploader, default_chat_id):
     """Execute database backup for a given connection"""
     try:
-        # Update last run timestamp
-        connections = load_connections()
-        try:
-            for conn in connections['connections']:
-                if conn['id'] == connection['id']:
-                    conn['last_run_at'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-                    save_connections(connections)
-                    break
-        except Exception as e:
-            logger.error('Error in reading files')
-            time.sleep(random.random() * 2)
         
         # Parse database URL and prepare backup
         db_info = parse_db_url(connection['db_url'])
@@ -200,8 +189,20 @@ def backup_database(connection, telegram_uploader, default_chat_id):
                 reply_to_message_id=reply_to,
                 added_by=connection.get('added_by', default_chat_id)
             )
+
+        # Update last run timestamp
+        connections = load_connections()
+        try:
+            for conn in connections['connections']:
+                if conn['id'] == connection['id']:
+                    conn['last_run_at'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+                    save_connections(connections)
+                    break
+        except Exception as e:
+            logger.error('Error in reading files')
+            time.sleep(random.random() * 2)
             
-            return True
+        return True
             
     except Exception as e:
         logger.error(f"Backup failed for {connection['name']}: {str(e)}")
